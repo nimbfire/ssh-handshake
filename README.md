@@ -15,6 +15,7 @@ cliente ──ssh──▶ sshd (chave/senha OK) ──ForceCommand──▶ ssh
 ## Sumário
 
 - [Como funciona o handshake de movimentos de mão](#como-funciona-o-handshake-de-movimentos-de-mão)
+- [Testando com Docker (Windows, macOS ou Linux)](#testando-com-docker-windows-macos-ou-linux)
 - [Instalação](#instalação)
 - [Configuração do sshd](#configuração-do-sshd)
 - [Modos de armazenamento: `system` x `home`](#modos-de-armazenamento-system-x-home)
@@ -73,6 +74,136 @@ Sua resposta (1-9):
 - As 9 opções aparecem sempre, então observar vários logins não reduz o conjunto de candidatos.
 - A entrada não ecoa no terminal.
 - Não há feedback por pergunta: o servidor monta a resposta completa e só no final compara o hash, em tempo constante. Um erro na pergunta 2 só aparece depois da pergunta 10.
+
+## Testando com Docker (Windows, macOS ou Linux)
+
+O `docker-compose.yml` sobe dois containers Linux:
+
+| Serviço | O que é |
+|---------|---------|
+| `server` | Ubuntu 24.04 com OpenSSH + ssh-handshake compilado do código local, rsyslog e 3 usuários de teste |
+| `client` | Ubuntu 24.04 com `ssh`, `sftp`, `sshpass`, `rsync` (o cliente Linux) |
+
+Usuários de teste (**senha = nome do usuário**, só para teste):
+
+| Usuário | Configuração |
+|---------|--------------|
+| `alice` | `--store home --allow-self-enroll`: cria o handshake no primeiro login |
+| `bob` | `--store system`: sem acesso até o root criar o handshake |
+| `carol` | fora do ssh-handshake (SSH normal, para comparar) |
+
+A configuração do sshd usada está em [`docker/server/sshd_config`](docker/server/sshd_config).
+
+### Pré-requisitos
+
+- Docker Desktop (no Windows, com o backend WSL 2) ou Docker Engine + Compose v2.
+- Nada de Go no host: a compilação acontece dentro do container.
+
+### Subir
+
+No PowerShell, cmd ou bash, na raiz do repositório:
+
+```sh
+docker compose up -d --build
+docker compose ps          # server e client devem estar "Up"
+```
+
+### Roteiro de testes
+
+**1. Primeiro login da alice (cria o handshake).** Responda as 10 perguntas, depois repita para confirmar, e você cai no shell:
+
+```sh
+docker compose exec client ssh alice@server      # senha: alice
+```
+
+**2. Login normal da alice.** Agora só responde uma vez. Repare que a ordem das opções muda a cada pergunta e a cada login:
+
+```sh
+docker compose exec client ssh alice@server
+```
+
+**3. Resposta errada.** Erre de propósito uma das respostas. Só no final aparece `Handshake falhou`, e o comando **não** é executado:
+
+```sh
+docker compose exec client ssh -t alice@server "echo NAO_DEVE_APARECER"
+```
+
+**4. Comando remoto.** Use `-t` para ter TTY (sem `-t` também funciona, mas a entrada fica visível):
+
+```sh
+docker compose exec client ssh -t alice@server "uname -a"
+```
+
+**5. Usuário sem handshake no modo system (bob).** Primeiro o acesso é negado. Depois o root cria o handshake no servidor, e o bob consegue entrar:
+
+```sh
+docker compose exec client ssh bob@server                              # negado: "Contate o administrador"
+docker compose exec server ssh-handshake enroll -u bob --store system  # como root, no servidor
+docker compose exec client ssh bob@server                              # senha: bob
+docker compose exec server ls -l /var/lib/ssh-handshake                # root:bob 0640
+```
+
+Fluxo alternativo, em que o admin não conhece o segredo: gere o registro no cliente e instale no servidor:
+
+```sh
+docker compose exec server rm /var/lib/ssh-handshake/bob
+# Em produção o --print roda na máquina do usuário; aqui usamos o binário do server:
+docker compose exec server sh -c "ssh-handshake enroll -u bob --print > /tmp/bob.json"
+docker compose exec server ssh-handshake install -u bob /tmp/bob.json
+```
+
+**6. Bypasses que devem falhar:**
+
+```sh
+docker compose exec client sftp alice@server                          # negado na hora
+docker compose exec client ssh -N -L 9000:localhost:22 alice@server   # o túnel é recusado ao ser usado
+docker compose exec client ssh -t alice@server "chmod 666 ~/.ssh/ssh-handshake"   # passa o handshake e afrouxa a permissão
+docker compose exec client ssh alice@server                           # negado: permissão insegura
+docker compose exec server chmod 600 /home/alice/.ssh/ssh-handshake   # conserta
+```
+
+**7. Usuário fora do grupo (carol):** SSH normal, sem handshake.
+
+```sh
+docker compose exec client ssh carol@server
+```
+
+**8. Do Windows direto, sem o container cliente.** A porta 2222 do host aponta para o servidor:
+
+```powershell
+ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL alice@localhost
+```
+
+(`UserKnownHostsFile=NUL` no Windows ou `/dev/null` no Linux/macOS, porque a host key muda quando o container é recriado.)
+
+### Ver os logs
+
+```sh
+docker compose exec server tail -f /var/log/auth.log   # eventos do ssh-handshake (accepted/denied/enrolled)
+docker compose logs -f server                          # logs do sshd
+```
+
+### Recompilar depois de mudar o código
+
+```sh
+docker compose up -d --build server
+```
+
+Os handshakes ficam em volumes (`homes` e `handshakes`) e sobrevivem a esse rebuild.
+
+### Resetar tudo
+
+```sh
+docker compose down -v     # apaga containers e volumes (todos os handshakes)
+```
+
+### Problemas comuns
+
+- **`exec /entrypoint.sh: no such file or directory` no Windows:** o arquivo foi salvo com CRLF. O `.gitattributes` força LF, mas um clone antigo pode precisar de `git rm --cached -r . && git reset --hard` (ou reclone).
+- **Porta 2222 ocupada:** mude o lado esquerdo de `"2222:22"` no `docker-compose.yml`.
+- **Digitei e nada aparece:** é esperado. A resposta não ecoa no terminal; digite o número e Enter.
+
+> ⚠️ Esse ambiente é só para teste: senhas fixas, `PasswordAuthentication yes` e chaves de host geradas no container. Não use essa configuração em produção.
 
 ## Instalação
 
@@ -343,6 +474,7 @@ internal/terminal/        I/O com o usuário (sem eco em TTY, prompts em stderr)
 internal/session/         exec do shell / SSH_ORIGINAL_COMMAND
 internal/audit/           logs em syslog
 examples/                 sshd_config e fail2ban
+docker/, docker-compose.yml  ambiente de teste server + client
 ```
 
 Os testes cobrem:

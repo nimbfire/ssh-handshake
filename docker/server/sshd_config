@@ -1,0 +1,29 @@
+# sshd_config do ambiente de TESTE (docker compose).
+Port 22
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin no
+UsePAM no
+PrintMotd no
+Subsystem sftp internal-sftp
+
+# alice: hash em ~/.ssh, criado no primeiro login (TOFU).
+Match User alice
+    ForceCommand /usr/local/bin/ssh-handshake login --store home --allow-self-enroll --fail-delay 2s
+    AllowTcpForwarding no
+    AllowStreamLocalForwarding no
+    PermitTunnel no
+    X11Forwarding no
+    AllowAgentForwarding no
+    PermitUserRC no
+
+# bob: hash root-owned em /var/lib/ssh-handshake (modo recomendado).
+Match User bob
+    ForceCommand /usr/local/bin/ssh-handshake login --store system --fail-delay 2s
+    AllowTcpForwarding no
+    AllowStreamLocalForwarding no
+    PermitTunnel no
+    X11Forwarding no
+    AllowAgentForwarding no
+    PermitUserRC no
