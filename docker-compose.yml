@@ -1,0 +1,26 @@
+# Ambiente de teste local: um servidor sshd com ssh-handshake e um cliente
+# Linux. Veja "Testando com Docker" no README.
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/server/Dockerfile
+    hostname: server
+    ports:
+      - "2222:22"   # também permite testar do Windows: ssh -p 2222 alice@localhost
+    volumes:
+      - handshakes:/var/lib/ssh-handshake
+      - homes:/home
+
+  client:
+    build:
+      context: docker/client
+    hostname: client
+    depends_on:
+      - server
+    stdin_open: true
+    tty: true
+
+volumes:
+  handshakes:
+  homes:

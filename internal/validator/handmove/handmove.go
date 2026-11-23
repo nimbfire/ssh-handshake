@@ -56,6 +56,22 @@ var Movements = [9]string{
 	"Mão em concha",
 }
 
+// Emojis shows each movement as an emoji, same order as Movements.
+var Emojis = [9]string{"✋", "✊", "👍", "👎", "✌️", "👉", "👌", "🤘", "🤲"}
+
+// ShowEmoji controls whether emojis are printed next to movement names.
+// Terminals without emoji fonts (e.g. old Windows conhost) can turn it off
+// with --no-emoji. Names are always printed too.
+var ShowEmoji = true
+
+// Label is how a movement is shown to the user.
+func Label(i int) string {
+	if ShowEmoji {
+		return Emojis[i] + "  " + Movements[i]
+	}
+	return Movements[i]
+}
+
 // Errors returned by the validator.
 var (
 	ErrTooManyInvalid = errors.New("handmove: too many invalid answers")
@@ -164,9 +180,9 @@ func ask(t terminal.Terminal, rnd io.Reader, cues []int) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		t.Printf("\n[%d/%d] Meu movimento: %s\n", i+1, len(cues), Movements[cue])
+		t.Printf("\n[%d/%d] Meu movimento: %s\n", i+1, len(cues), Label(cue))
 		for j, m := range perm {
-			t.Printf("  %d) %s\n", j+1, Movements[m])
+			t.Printf("  %d) %s\n", j+1, Label(m))
 		}
 		choice, err := readChoice(t, len(perm))
 		if err != nil {

@@ -104,3 +104,28 @@ func TestShuffleIsPermutation(t *testing.T) {
 		}
 	}
 }
+
+func TestLabels(t *testing.T) {
+	defer func() { ShowEmoji = true }()
+	if got := Label(2); got != "👍  Polegar para cima" {
+		t.Errorf("Label = %q", got)
+	}
+	ShowEmoji = false
+	if got := Label(2); got != "Polegar para cima" {
+		t.Errorf("Label without emoji = %q", got)
+	}
+}
+
+func TestChallengeWithoutEmoji(t *testing.T) {
+	ShowEmoji = false
+	defer func() { ShowEmoji = true }()
+	params, _ := json.Marshal(Params{Cues: make([]int, MinLength)})
+	a := &testutil.Answerer{Want: seq(0, 1, 2, 3, 4, 5, 6, 7)}
+	got, err := Validator{}.Challenge(a, nil, params)
+	if err != nil || len(got) != MinLength {
+		t.Fatalf("got %v, %v", got, err)
+	}
+	if strings.Contains(a.Out.String(), "👍") {
+		t.Fatal("emoji printed with ShowEmoji=false")
+	}
+}

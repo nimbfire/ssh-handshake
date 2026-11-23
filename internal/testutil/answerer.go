@@ -46,6 +46,10 @@ func (a *Answerer) ReadLine(prompt string) (string, error) {
 				name = line[i+2:]
 			}
 		}
+		// Ignore an emoji prefix ("👍  Polegar para cima").
+		if i := strings.Index(name, "  "); i >= 0 {
+			name = name[i+2:]
+		}
 		if name == want {
 			return fmt.Sprint(n), nil
 		}

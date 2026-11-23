@@ -89,6 +89,10 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.IntVar(&c.length, "length", handmove.DefaultLength, "número de passos ao criar um handshake")
 	fs.StringVar(&c.validator, "validator", handmove.Name, "tipo de handshake ao criar um novo")
 	fs.DurationVar(&c.timeout, "timeout", 3*time.Minute, "tempo máximo da interação")
+	fs.BoolFunc("no-emoji", "não mostra emojis das mãos (terminais sem suporte)", func(string) error {
+		handmove.ShowEmoji = false
+		return nil
+	})
 }
 
 func (c *common) store() (store.Store, error) {
