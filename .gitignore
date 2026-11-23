@@ -1,0 +1,5 @@
+/ssh-handshake
+/bin/
+/dist/
+*.test
+*.out
