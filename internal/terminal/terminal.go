@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"golang.org/x/term"
 )
@@ -21,6 +22,32 @@ type Terminal interface {
 	// ReadLine shows prompt and reads one line. On a TTY the input is not
 	// echoed.
 	ReadLine(prompt string) (string, error)
+}
+
+// KeyReader is implemented by terminals that can read a single keypress
+// without waiting for Enter. Validators use it when KeyMode reports true and
+// fall back to ReadLine otherwise.
+type KeyReader interface {
+	KeyMode() bool
+	// ReadKey shows prompt and returns the first key in accept, without
+	// echo. Other keys are ignored. Ctrl+C returns ErrInterrupted, Ctrl+D
+	// io.EOF.
+	ReadKey(prompt, accept string) (byte, error)
+}
+
+// ErrInterrupted is returned when the user presses Ctrl+C in key mode (raw
+// mode turns it into a byte instead of SIGINT).
+var ErrInterrupted = errors.New("terminal: interrupted")
+
+// restore undoes raw mode; used by Restore before an abrupt exit.
+var restore atomic.Pointer[func()]
+
+// Restore puts the terminal back in its normal mode if a read left it raw.
+// Call it before os.Exit from another goroutine (e.g. a timeout).
+func Restore() {
+	if f := restore.Swap(nil); f != nil {
+		(*f)()
+	}
 }
 
 // ErrLineTooLong is returned when the user sends an absurdly long line.
@@ -64,6 +91,39 @@ func (s *Std) ReadLine(prompt string) (string, error) {
 		return strings.TrimSpace(string(b)), nil
 	}
 	return readLine(s.in)
+}
+
+func (s *Std) KeyMode() bool { return s.tty }
+
+func (s *Std) ReadKey(prompt, accept string) (byte, error) {
+	fmt.Fprint(s.out, prompt)
+	old, err := term.MakeRaw(s.fd)
+	if err != nil {
+		return 0, err
+	}
+	f := func() { _ = term.Restore(s.fd, old) }
+	restore.Store(&f)
+	defer Restore()
+	// Read straight from the fd, one byte at a time, so keys typed ahead stay
+	// in the kernel buffer for the next question.
+	var b [1]byte
+	for {
+		n, err := os.Stdin.Read(b[:])
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			continue
+		}
+		switch c := b[0]; {
+		case c == 0x03:
+			return 0, ErrInterrupted
+		case c == 0x04:
+			return 0, io.EOF
+		case strings.IndexByte(accept, c) >= 0:
+			return c, nil
+		}
+	}
 }
 
 func readLine(r *bufio.Reader) (string, error) {

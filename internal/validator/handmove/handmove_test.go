@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nimbfire/ssh-handshake/internal/terminal"
 	"github.com/nimbfire/ssh-handshake/internal/testutil"
 	"github.com/nimbfire/ssh-handshake/internal/validator"
 )
@@ -127,5 +128,23 @@ func TestChallengeWithoutEmoji(t *testing.T) {
 	}
 	if strings.Contains(a.Out.String(), "👍") {
 		t.Fatal("emoji printed with ShowEmoji=false")
+	}
+}
+
+func TestDigitsStableWithinPass(t *testing.T) {
+	cues := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 0}
+	lines := make([]string, len(cues))
+	for i := range lines {
+		lines[i] = "4"
+	}
+	term := &terminal.Scripted{Lines: lines}
+	got, err := ask(term, nil, cues, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range got {
+		if g != got[0] {
+			t.Fatalf("same digit gave different movements within one pass: %v", got)
+		}
 	}
 }

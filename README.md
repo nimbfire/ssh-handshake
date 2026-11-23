@@ -14,7 +14,8 @@ cliente ──ssh──▶ sshd (chave/senha OK) ──ForceCommand──▶ ssh
 
 ## Sumário
 
-- [Como funciona o handshake de movimentos de mão](#como-funciona-o-handshake-de-movimentos-de-mão)
+- [Como funciona o handshake de sequência de mãos (padrão)](#como-funciona-o-handshake-de-sequência-de-mãos-padrão)
+- [Validador alternativo: perguntas e respostas (`handmove`)](#validador-alternativo-perguntas-e-respostas-handmove)
 - [Testando com Docker (Windows, macOS ou Linux)](#testando-com-docker-windows-macos-ou-linux)
 - [Instalação](#instalação)
 - [Configuração do sshd](#configuração-do-sshd)
@@ -27,9 +28,9 @@ cliente ──ssh──▶ sshd (chave/senha OK) ──ForceCommand──▶ ssh
 - [Criando novos validadores](#criando-novos-validadores)
 - [Desenvolvimento](#desenvolvimento)
 
-## Como funciona o handshake de movimentos de mão
+## Como funciona o handshake de sequência de mãos (padrão)
 
-O validador padrão (`handmove`) é um sistema de perguntas e respostas. Existem 9 movimentos de mão:
+O validador padrão (`handseq`) funciona como uma senha feita de movimentos de mão. Existem 9 movimentos:
 
 | # | Emoji | Movimento |
 |---|:-----:|-----------|
@@ -43,20 +44,12 @@ O validador padrão (`handmove`) é um sistema de perguntas e respostas. Existem
 | 7 | 🤘 | Chifres (indicador e mindinho) |
 | 8 | 🤲 | Mão em concha |
 
-**Na criação (enrollment):**
-
-1. O servidor sorteia, com `crypto/rand`, uma sequência fixa de *N* movimentos dele (as "deixas"). O padrão é *N* = 10 e o mínimo é 8.
-2. Para cada deixa, o usuário escolhe com qual movimento responde. Esse é o segredo.
-3. O usuário repete a sequência inteira para confirmar. As opções aparecem embaralhadas de novo.
-4. O sistema rejeita sequências com menos de 3 respostas diferentes.
-5. As deixas ficam salvas em texto claro. As respostas são salvas só como hash Argon2id.
-
-**No login:**
+O usuário digita a sequência de mãos que quiser e aperta Enter:
 
 ```
 == ssh-handshake ==
 
-[1/10] Meu movimento: ✊  Punho fechado
+Opções:
   1) 👍  Polegar para cima
   2) ✌️  Sinal de V (paz)
   3) 👎  Polegar para baixo
@@ -66,13 +59,63 @@ O validador padrão (`handmove`) é um sistema de perguntas e respostas. Existem
   7) ✋  Mão aberta (palma para frente)
   8) 👌  Sinal de OK
   9) ✊  Punho fechado
+
+Digite os números das mãos. Enter termina, Backspace apaga.
+
+Seu handshake (3): 👍 🤲 ✊
+```
+
+- **Tamanho livre:** o Enter encerra a sequência. Na criação, o mínimo é 2 mãos (o admin pode exigir mais com `--min-length`) e o máximo é 64. A sequência precisa ter pelo menos 2 movimentos diferentes.
+- **Uma tecla por mão:** com TTY, cada dígito entra na hora, sem Enter, e a tela é redesenhada mostrando a sequência digitada até agora. Backspace apaga a última mão. Outras teclas são ignoradas.
+- **Números das mãos:** por padrão, os números são sorteados uma vez por login e ficam fixos durante a sessão. Com `--fixed-order`, cada mão tem sempre o mesmo número (a ordem da tabela acima: 1 = ✋, 2 = ✊ …), em todo login.
+- **Confirmação:** na criação, o usuário digita a sequência duas vezes. Sem `--fixed-order`, os números são sorteados de novo para a confirmação.
+- **Sem TTY** (`ssh host cmd` sem `-t`): a sequência é lida como uma linha de dígitos (`3 1 9` ou `319`) e Enter.
+- **O que é salvo:** só o hash Argon2id da sequência de movimentos (não dos dígitos). O tamanho da sequência não fica salvo em claro.
+- **Sem feedback parcial:** a sequência inteira é comparada no final, em tempo constante.
+
+## Validador alternativo: perguntas e respostas (`handmove`)
+
+Use `--validator handmove` para criar handshakes desse tipo. Registros `handmove` já existentes continuam funcionando, qualquer que seja o `--validator`: ele só vale para novos cadastros.
+
+Aqui o servidor mostra uma "deixa" (um movimento dele) e o usuário responde com um movimento dele.
+
+**Na criação (enrollment):**
+
+1. O servidor sorteia, com `crypto/rand`, uma sequência fixa de *N* movimentos dele (as "deixas"). O padrão é *N* = 10 e o mínimo é 8.
+2. Para cada deixa, o usuário escolhe com qual movimento responde. Esse é o segredo.
+3. O usuário repete a sequência inteira para confirmar. Os números das opções são sorteados de novo para a confirmação.
+4. O sistema rejeita sequências com menos de 3 respostas diferentes.
+5. As deixas ficam salvas em texto claro. As respostas são salvas só como hash Argon2id.
+
+**No login:**
+
+```
+== ssh-handshake ==
+
+Opções:
+  1) 👍  Polegar para cima
+  2) ✌️  Sinal de V (paz)
+  3) 👎  Polegar para baixo
+  4) 🤲  Mão em concha
+  5) 👉  Indicador apontando
+  6) 🤘  Chifres (indicador e mindinho)
+  7) ✋  Mão aberta (palma para frente)
+  8) 👌  Sinal de OK
+  9) ✊  Punho fechado
+
+Suas respostas até agora:
+  [1/10] ✊  Punho fechado  →  👍  Polegar para cima
+  [2/10] 👌  Sinal de OK  →  🤲  Mão em concha
+
+[3/10] Meu movimento: 🤘  Chifres (indicador e mindinho)
 Sua resposta (1-9):
 ```
 
 - As deixas aparecem sempre na mesma ordem.
-- As 9 opções são **embaralhadas a cada pergunta e a cada login**. O usuário digita de 1 a 9, mas o que entra no hash é *qual movimento* foi escolhido, não o dígito. Assim, quem grava as teclas ou olha a tela vê números que mudam a cada sessão.
+- As 9 opções são **embaralhadas uma vez por login** e mantêm o mesmo número em todas as perguntas daquela sessão. O usuário digita de 1 a 9, mas o que entra no hash é *qual movimento* foi escolhido, não o dígito. Assim, quem grava as teclas vê números que mudam a cada sessão.
 - As 9 opções aparecem sempre, então observar vários logins não reduz o conjunto de candidatos.
-- A entrada não ecoa no terminal.
+- Com TTY, cada resposta é **uma tecla só, sem Enter**: ao apertar o dígito, a tela é redesenhada com a próxima pergunta e a lista das respostas já dadas (movimento do servidor → movimento escolhido). Outras teclas são ignoradas. Sem TTY (`ssh host cmd` sem `-t`), a resposta é lida por linha, com Enter, e a lista vai sendo impressa em sequência.
+- Não dá para digitar os números antes de abrir a sessão: o sorteio das opções só acontece quando o handshake começa.
 - Os emojis aparecem junto com o nome. Se o terminal do cliente não tiver fonte de emoji (por exemplo, o console antigo do Windows; o Windows Terminal funciona), use `--no-emoji` no `ForceCommand`, e só os nomes aparecem.
 - Não há feedback por pergunta: o servidor monta a resposta completa e só no final compara o hash, em tempo constante. Um erro na pergunta 2 só aparece depois da pergunta 10.
 
@@ -111,19 +154,19 @@ docker compose ps          # server e client devem estar "Up"
 
 ### Roteiro de testes
 
-**1. Primeiro login da alice (cria o handshake).** Responda as 10 perguntas, depois repita para confirmar, e você cai no shell:
+**1. Primeiro login da alice (cria o handshake).** Digite uma sequência de mãos e Enter, depois repita para confirmar, e você cai no shell:
 
 ```sh
 docker compose exec client ssh alice@server      # senha: alice
 ```
 
-**2. Login normal da alice.** Agora só responde uma vez. Repare que a ordem das opções muda a cada pergunta e a cada login:
+**2. Login normal da alice.** Agora só digita uma vez. Repare que os números das mãos mudam a cada login (a não ser com `--fixed-order` no `ForceCommand`):
 
 ```sh
 docker compose exec client ssh alice@server
 ```
 
-**3. Resposta errada.** Erre de propósito uma das respostas. Só no final aparece `Handshake falhou`, e o comando **não** é executado:
+**3. Resposta errada.** Erre de propósito uma das mãos. Só depois do Enter aparece `Handshake falhou`, e o comando **não** é executado:
 
 ```sh
 docker compose exec client ssh -t alice@server "echo NAO_DEVE_APARECER"
@@ -202,7 +245,7 @@ docker compose down -v     # apaga containers e volumes (todos os handshakes)
 
 - **`exec /entrypoint.sh: no such file or directory` no Windows:** o arquivo foi salvo com CRLF. O `.gitattributes` força LF, mas um clone antigo pode precisar de `git rm --cached -r . && git reset --hard` (ou reclone).
 - **Porta 2222 ocupada:** mude o lado esquerdo de `"2222:22"` no `docker-compose.yml`.
-- **Digitei e nada aparece:** é esperado. A resposta não ecoa no terminal; digite o número e Enter.
+- **Digitei e nada aparece:** sem TTY (`ssh host cmd` sem `-t`) a resposta é lida por linha: digite o número e Enter. Com TTY basta a tecla.
 
 > ⚠️ Esse ambiente é só para teste: senhas fixas, `PasswordAuthentication yes` e chaves de host geradas no container. Não use essa configuração em produção.
 
@@ -336,8 +379,10 @@ ssh-handshake version
 | `--store home\|system` | todos | `home` (`install`: `system`) | backend de armazenamento |
 | `--store-dir DIR` | todos | `/var/lib/ssh-handshake` | diretório do store `system` |
 | `--timeout D` | login, enroll, verify | `3m` | tempo máximo de interação |
-| `--length N` | enroll, login (TOFU) | `10` | número de passos (8–32) |
-| `--validator NOME` | enroll, login (TOFU) | `handmove` | tipo de handshake para novos registros |
+| `--validator NOME` | enroll, login (TOFU) | `handseq` | tipo de handshake para novos registros (`handseq` ou `handmove`) |
+| `--min-length N` | enroll, login (TOFU) | `2` | `handseq`: mínimo de mãos na criação (2–64) |
+| `--fixed-order` | login, enroll, verify | desligado | `handseq`: cada mão tem sempre o mesmo número, em todo login |
+| `--length N` | enroll, login (TOFU) | `10` | `handmove`: número de passos (8–32) |
 | `--allow-self-enroll` | login | desligado | permite criar no 1º login (só `home`) |
 | `--no-emoji` | login, enroll, verify | desligado | mostra só os nomes dos movimentos, sem emoji |
 | `--fail-delay D` | login | `3s` | espera antes de desconectar após falha |
@@ -358,22 +403,26 @@ Códigos de saída: `0` sucesso; `1` negado ou erro; `2` uso incorreto. Em `logi
 
 ### Espaço de chaves e ataque offline
 
-Cada resposta tem 9 possibilidades, ou ~3,17 bits:
+Cada mão tem 9 possibilidades, ou ~3,17 bits:
 
-| Passos | Combinações | Busca completa a ~0,1 s de CPU por tentativa (1 núcleo) |
+| Mãos | Combinações | Busca completa a ~0,1 s de CPU por tentativa (1 núcleo) |
 |-------:|------------:|------------------------------------:|
+| 2 (mínimo do `handseq`) | 81 | **~8 segundos** |
+| 4 | 6.561 | ~11 minutos |
 | 6 | 531 mil | ~15 horas |
-| 8 (mínimo) | 43 milhões | ~50 dias |
-| 10 (padrão) | 3,5 bilhões | ~11 anos |
+| 8 (mínimo do `handmove`) | 43 milhões | ~50 dias |
+| 10 | 3,5 bilhões | ~11 anos |
 | 12 | 282 bilhões | ~900 anos |
+
+> ⚠️ Com o `handseq`, o mínimo de 2 mãos protege só contra tentativas online, que são limitadas (uma por conexão, `--fail-delay`, fail2ban). Se o arquivo de hash vazar, sequências curtas caem em segundos ou minutos. Em produção, use `--min-length 8` ou mais. Como o tamanho não fica salvo, o atacante precisa testar todos os tamanhos, mas isso aumenta pouco o custo (~12%).
 
 Os valores foram medidos com `go test -bench . ./internal/kdf/`: ~60 ms por verificação usando 2 threads. Um atacante com *k* núcleos divide esses tempos por *k*: com 100 núcleos, 10 passos caem para ~40 dias. Por isso o arquivo de hash precisa ficar protegido.
 
 Com um hash rápido (SHA-256), mesmo 12 passos cairiam em segundos numa GPU. Por isso:
 
 - **Argon2id** com 64 MiB, 3 passadas, 2 threads e salt aleatório de 16 bytes. Os parâmetros ficam no arquivo, e o verificador rejeita parâmetros abaixo de um piso (19 MiB) ou acima de um teto (1 GiB), para impedir downgrade e DoS.
-- O hash é **vinculado** ao usuário, ao validador e às deixas. Mudar qualquer um desses invalida o registro.
-- O hash ainda é a parte mais sensível: **quem lê o arquivo pode montar um ataque offline**. No modo `system`, só root e o próprio usuário leem o arquivo. Use 10 passos ou mais.
+- O hash é **vinculado** ao usuário, ao validador e aos parâmetros (as deixas, no `handmove`). Mudar qualquer um desses invalida o registro.
+- O hash ainda é a parte mais sensível: **quem lê o arquivo pode montar um ataque offline**. No modo `system`, só root e o próprio usuário leem o arquivo. Use 10 mãos ou mais.
 
 ### Ataque online
 
@@ -384,7 +433,7 @@ Com um hash rápido (SHA-256), mesmo 12 passos cairiam em segundos numa GPU. Por
 
 ### Outros cuidados
 
-- **Keylogger e shoulder surfing:** os dígitos digitados mudam a cada login porque as opções são embaralhadas. Quem filma a tela inteira em um login, porém, vê os movimentos escolhidos. É um segredo de conhecimento, como uma senha.
+- **Keylogger e shoulder surfing:** os dígitos digitados mudam a cada login porque as opções são embaralhadas. Como o número de cada movimento é fixo durante a sessão, um keylogger sozinho descobre quais respostas se repetem (dígitos iguais = mesmo movimento), mas não quais movimentos são. Com `--fixed-order`, os dígitos são sempre os mesmos, e um keylogger sozinho captura o handshake inteiro: aí ele protege só como uma senha numérica. Quem vê a tela durante um login vê os movimentos escolhidos, porque a sequência digitada fica na tela. É um segredo de conhecimento, como uma senha.
 - **Root:** root pode tudo. Se a conta root usar SSH, coloque-a no grupo também, ou desabilite `PermitRootLogin`.
 - **Console ou outro acesso:** o handshake só vale para SSH. Login local, painel do provedor etc. não passam por ele.
 
@@ -424,7 +473,7 @@ Para usar com fail2ban, copie `examples/fail2ban/filter.d-ssh-handshake.conf` e 
 O hash é `Argon2id(len(ad) ‖ ad ‖ len(segredo) ‖ segredo, salt)`, onde:
 
 - `ad = "ssh-handshake/v1\0" ‖ user ‖ "\0" ‖ validator ‖ "\0" ‖ params (JSON compactado)`;
-- para o `handmove`, o segredo é a sequência de índices dos movimentos escolhidos.
+- nos dois validadores, o segredo é a sequência de índices dos movimentos escolhidos (no `handseq`, `params` é `{}`).
 
 **Nunca reordene o catálogo `handmove.Movements`**: os índices fazem parte do formato.
 
@@ -471,7 +520,8 @@ internal/app/             fluxos login / enroll / verify (testáveis)
 internal/kdf/             Argon2id + limites de parâmetros
 internal/store/           backends home e system, checagens de dono/permissão
 internal/validator/       interface + registro de validadores
-internal/validator/handmove/  validador de movimentos de mão
+internal/validator/handseq/   validador padrão: sequência de mãos
+internal/validator/handmove/  validador de perguntas e respostas (e catálogo de movimentos)
 internal/terminal/        I/O com o usuário (sem eco em TTY, prompts em stderr)
 internal/session/         exec do shell / SSH_ORIGINAL_COMMAND
 internal/audit/           logs em syslog
