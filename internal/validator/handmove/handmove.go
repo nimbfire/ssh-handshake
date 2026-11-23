@@ -129,10 +129,9 @@ func (v Validator) Enroll(t terminal.Terminal, rnd io.Reader, opts validator.Enr
 		return nil, nil, err
 	}
 
-	t.Printf("\n== Criando novo handshake (%d passos) ==\n", n)
-	t.Printf("Para cada movimento do servidor, escolha o movimento com que você responde.\n")
-	t.Printf("Memorize a sequência: ela não pode ser recuperada, só redefinida.\n")
-	first, err := ask(t, rnd, p.Cues)
+	first, err := ask(t, rnd, p.Cues, fmt.Sprintf("== Criando novo handshake (%d passos) ==\n", n)+
+		"Para cada movimento do servidor, escolha o movimento com que você responde.\n"+
+		"Memorize a sequência: ela não pode ser recuperada, só redefinida.\n")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -140,8 +139,7 @@ func (v Validator) Enroll(t terminal.Terminal, rnd io.Reader, opts validator.Enr
 		return nil, nil, ErrWeak
 	}
 
-	t.Printf("\n== Confirme o handshake (as opções foram embaralhadas de novo) ==\n")
-	second, err := ask(t, rnd, p.Cues)
+	second, err := ask(t, rnd, p.Cues, "== Confirme o handshake (os números das opções foram sorteados de novo) ==\n")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,33 +165,67 @@ func (v Validator) Challenge(t terminal.Terminal, rnd io.Reader, raw json.RawMes
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
-	t.Printf("\n== ssh-handshake ==\n")
-	return ask(t, rnd, p.Cues)
+	return ask(t, rnd, p.Cues, "== ssh-handshake ==\n")
 }
 
 // ask runs one pass over the cues and returns the chosen movement indexes.
 // It gives no feedback on correctness.
-func ask(t terminal.Terminal, rnd io.Reader, cues []int) ([]byte, error) {
+//
+// The options are shuffled once per pass, so the digit of each movement stays
+// the same for the whole pass and changes on the next login. Before each
+// question the answers given so far are shown again. On a TTY the screen is
+// redrawn instead of scrolling.
+func ask(t terminal.Terminal, rnd io.Reader, cues []int, header string) ([]byte, error) {
+	perm, err := shuffle(rnd, len(Movements))
+	if err != nil {
+		return nil, err
+	}
+	k, ok := t.(terminal.KeyReader)
+	redraw := ok && k.KeyMode()
+	if !redraw {
+		t.Printf("\n%s", header)
+	}
 	out := make([]byte, 0, len(cues))
-	for i, cue := range cues {
-		perm, err := shuffle(rnd, len(Movements))
-		if err != nil {
-			return nil, err
+	render := func() {
+		if redraw {
+			t.Printf("\033[H\033[2J%s", header)
 		}
-		t.Printf("\n[%d/%d] Meu movimento: %s\n", i+1, len(cues), Label(cue))
+		t.Printf("\nOpções:\n")
 		for j, m := range perm {
 			t.Printf("  %d) %s\n", j+1, Label(m))
 		}
+		if len(out) > 0 {
+			t.Printf("\nSuas respostas até agora:\n")
+			for i, a := range out {
+				t.Printf("  [%d/%d] %s  →  %s\n", i+1, len(cues), Label(cues[i]), Label(int(a)))
+			}
+		}
+	}
+	for i, cue := range cues {
+		render()
+		t.Printf("\n[%d/%d] Meu movimento: %s\n", i+1, len(cues), Label(cue))
 		choice, err := readChoice(t, len(perm))
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, byte(perm[choice-1]))
 	}
+	if redraw {
+		render()
+	}
 	return out, nil
 }
 
 func readChoice(t terminal.Terminal, max int) (int, error) {
+	// On a TTY one keypress is enough (options are 1-9): no Enter needed.
+	if k, ok := t.(terminal.KeyReader); ok && k.KeyMode() && max <= 9 {
+		accept := "123456789"[:max]
+		c, err := k.ReadKey(fmt.Sprintf("Sua resposta (1-%d): ", max), accept)
+		if err != nil {
+			return 0, err
+		}
+		return int(c - '0'), nil
+	}
 	for attempt := 0; attempt < maxInvalid; attempt++ {
 		line, err := t.ReadLine(fmt.Sprintf("Sua resposta (1-%d): ", max))
 		if err != nil {

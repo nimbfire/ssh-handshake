@@ -24,6 +24,9 @@ type EnrollOptions struct {
 	// Length is the number of steps/questions, when the validator has one.
 	// Zero means the validator's default.
 	Length int
+	// MinLength is the minimum length, for validators whose length is chosen
+	// by the user. Zero means the validator's own minimum.
+	MinLength int
 }
 
 // Validator is one kind of handshake.

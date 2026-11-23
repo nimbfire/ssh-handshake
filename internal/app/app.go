@@ -29,6 +29,8 @@ type Config struct {
 	Validator string
 	// Length passed to the validator on enrollment.
 	Length int
+	// MinLength passed to the validator on enrollment.
+	MinLength int
 	// FailDelay is slept before reporting a failure, to slow online guessing.
 	FailDelay time.Duration
 	Log       audit.Logger
@@ -122,7 +124,7 @@ func NewRecord(c Config, acct store.Account, t terminal.Terminal) (*store.Record
 	if err != nil {
 		return nil, err
 	}
-	params, secret, err := v.Enroll(t, c.Rand, validator.EnrollOptions{Length: c.Length})
+	params, secret, err := v.Enroll(t, c.Rand, validator.EnrollOptions{Length: c.Length, MinLength: c.MinLength})
 	if err != nil {
 		return nil, err
 	}

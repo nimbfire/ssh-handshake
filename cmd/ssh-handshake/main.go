@@ -22,6 +22,7 @@ import (
 	"github.com/nimbfire/ssh-handshake/internal/terminal"
 	"github.com/nimbfire/ssh-handshake/internal/validator"
 	"github.com/nimbfire/ssh-handshake/internal/validator/handmove"
+	"github.com/nimbfire/ssh-handshake/internal/validator/handseq"
 )
 
 var version = "dev"
@@ -79,6 +80,7 @@ type common struct {
 	storeKind string
 	storeDir  string
 	length    int
+	minLength int
 	validator string
 	timeout   time.Duration
 }
@@ -86,8 +88,13 @@ type common struct {
 func (c *common) register(fs *flag.FlagSet) {
 	fs.StringVar(&c.storeKind, "store", "home", `onde fica o hash: "home" (~/.ssh/ssh-handshake) ou "system" (root-owned)`)
 	fs.StringVar(&c.storeDir, "store-dir", store.DefaultSystemDir, "diretório do store system")
-	fs.IntVar(&c.length, "length", handmove.DefaultLength, "número de passos ao criar um handshake")
-	fs.StringVar(&c.validator, "validator", handmove.Name, "tipo de handshake ao criar um novo")
+	fs.IntVar(&c.length, "length", handmove.DefaultLength, "número de passos ao criar um handshake handmove")
+	fs.IntVar(&c.minLength, "min-length", handseq.MinLength, "mínimo de mãos ao criar um handshake handseq")
+	fs.StringVar(&c.validator, "validator", handseq.Name, "tipo de handshake ao criar um novo")
+	fs.BoolFunc("fixed-order", "handseq: cada mão tem sempre o mesmo número, em todo login", func(string) error {
+		handseq.FixedOrder = true
+		return nil
+	})
 	fs.DurationVar(&c.timeout, "timeout", 3*time.Minute, "tempo máximo da interação")
 	fs.BoolFunc("no-emoji", "não mostra emojis das mãos (terminais sem suporte)", func(string) error {
 		handmove.ShowEmoji = false
@@ -110,13 +117,16 @@ func (c *common) config(log audit.Logger) (app.Config, error) {
 	if err != nil {
 		return app.Config{}, err
 	}
+	if c.minLength < handseq.MinLength || c.minLength > handseq.MaxLength {
+		return app.Config{}, fmt.Errorf("--min-length deve estar entre %d e %d", handseq.MinLength, handseq.MaxLength)
+	}
 	if c.length < handmove.MinLength || c.length > handmove.MaxLength {
 		return app.Config{}, fmt.Errorf("--length deve estar entre %d e %d", handmove.MinLength, handmove.MaxLength)
 	}
 	if _, err := validator.Get(c.validator); err != nil {
 		return app.Config{}, err
 	}
-	return app.Config{Store: st, Validator: c.validator, Length: c.length, Log: log}, nil
+	return app.Config{Store: st, Validator: c.validator, Length: c.length, MinLength: c.minLength, Log: log}, nil
 }
 
 func runLogin(args []string) error {
@@ -307,6 +317,7 @@ func guard(timeout time.Duration) {
 	}()
 	if timeout > 0 {
 		time.AfterFunc(timeout, func() {
+			terminal.Restore()
 			fmt.Fprintln(os.Stderr, "\nTempo esgotado. Desconectando.")
 			os.Exit(1)
 		})
