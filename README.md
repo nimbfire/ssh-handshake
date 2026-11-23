@@ -31,17 +31,17 @@ cliente ──ssh──▶ sshd (chave/senha OK) ──ForceCommand──▶ ssh
 
 O validador padrão (`handmove`) é um sistema de perguntas e respostas. Existem 9 movimentos de mão:
 
-| # | Movimento |
-|---|-----------|
-| 0 | Mão aberta (palma para frente) |
-| 1 | Punho fechado |
-| 2 | Polegar para cima |
-| 3 | Polegar para baixo |
-| 4 | Sinal de V (paz) |
-| 5 | Indicador apontando |
-| 6 | Sinal de OK |
-| 7 | Chifres (indicador e mindinho) |
-| 8 | Mão em concha |
+| # | Emoji | Movimento |
+|---|:-----:|-----------|
+| 0 | ✋ | Mão aberta (palma para frente) |
+| 1 | ✊ | Punho fechado |
+| 2 | 👍 | Polegar para cima |
+| 3 | 👎 | Polegar para baixo |
+| 4 | ✌️ | Sinal de V (paz) |
+| 5 | 👉 | Indicador apontando |
+| 6 | 👌 | Sinal de OK |
+| 7 | 🤘 | Chifres (indicador e mindinho) |
+| 8 | 🤲 | Mão em concha |
 
 **Na criação (enrollment):**
 
@@ -56,16 +56,16 @@ O validador padrão (`handmove`) é um sistema de perguntas e respostas. Existem
 ```
 == ssh-handshake ==
 
-[1/10] Meu movimento: Sinal de OK
-  1) Polegar para baixo
-  2) Mão em concha
-  3) Punho fechado
-  4) Sinal de V (paz)
-  5) Mão aberta (palma para frente)
-  6) Chifres (indicador e mindinho)
-  7) Indicador apontando
-  8) Polegar para cima
-  9) Sinal de OK
+[1/10] Meu movimento: ✊  Punho fechado
+  1) 👍  Polegar para cima
+  2) ✌️  Sinal de V (paz)
+  3) 👎  Polegar para baixo
+  4) 🤲  Mão em concha
+  5) 👉  Indicador apontando
+  6) 🤘  Chifres (indicador e mindinho)
+  7) ✋  Mão aberta (palma para frente)
+  8) 👌  Sinal de OK
+  9) ✊  Punho fechado
 Sua resposta (1-9):
 ```
 
@@ -73,6 +73,7 @@ Sua resposta (1-9):
 - As 9 opções são **embaralhadas a cada pergunta e a cada login**. O usuário digita de 1 a 9, mas o que entra no hash é *qual movimento* foi escolhido, não o dígito. Assim, quem grava as teclas ou olha a tela vê números que mudam a cada sessão.
 - As 9 opções aparecem sempre, então observar vários logins não reduz o conjunto de candidatos.
 - A entrada não ecoa no terminal.
+- Os emojis aparecem junto com o nome. Se o terminal do cliente não tiver fonte de emoji (por exemplo, o console antigo do Windows; o Windows Terminal funciona), use `--no-emoji` no `ForceCommand`, e só os nomes aparecem.
 - Não há feedback por pergunta: o servidor monta a resposta completa e só no final compara o hash, em tempo constante. Um erro na pergunta 2 só aparece depois da pergunta 10.
 
 ## Testando com Docker (Windows, macOS ou Linux)
@@ -338,6 +339,7 @@ ssh-handshake version
 | `--length N` | enroll, login (TOFU) | `10` | número de passos (8–32) |
 | `--validator NOME` | enroll, login (TOFU) | `handmove` | tipo de handshake para novos registros |
 | `--allow-self-enroll` | login | desligado | permite criar no 1º login (só `home`) |
+| `--no-emoji` | login, enroll, verify | desligado | mostra só os nomes dos movimentos, sem emoji |
 | `--fail-delay D` | login | `3s` | espera antes de desconectar após falha |
 | `-u USER` | enroll, install | usuário atual | usuário alvo |
 | `--print` | enroll | — | imprime o registro em stdout em vez de salvar |
