@@ -10,7 +10,7 @@ Subsystem sftp internal-sftp
 
 # alice: hash em ~/.ssh, criado no primeiro login (TOFU).
 Match User alice
-    ForceCommand /usr/local/bin/ssh-handshake login --store home --allow-self-enroll --fail-delay 2s
+    ForceCommand /usr/local/bin/ssh-handshake login --store home --allow-self-enroll --fail-delay 2s --sound-markers
     AllowTcpForwarding no
     AllowStreamLocalForwarding no
     PermitTunnel no
@@ -20,7 +20,7 @@ Match User alice
 
 # bob: hash root-owned em /var/lib/ssh-handshake (modo recomendado).
 Match User bob
-    ForceCommand /usr/local/bin/ssh-handshake login --store system --fail-delay 2s
+    ForceCommand /usr/local/bin/ssh-handshake login --store system --fail-delay 2s --sound-markers
     AllowTcpForwarding no
     AllowStreamLocalForwarding no
     PermitTunnel no

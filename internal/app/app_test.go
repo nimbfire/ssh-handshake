@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,5 +106,35 @@ func TestSessionEndsOnEOF(t *testing.T) {
 	short := &testutil.Answerer{Want: seq(answer[:3])}
 	if err := Login(cfg, acct, short); !errors.Is(err, ErrDenied) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestSoundMarkers(t *testing.T) {
+	cfg, acct, _, _ := setup(t, true)
+	first := &testutil.Answerer{Want: append(seq(answer), seq(answer)...)}
+	if err := Login(cfg, acct, first); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(first.Out.String(), "\033]777;") {
+		t.Fatal("marker sent without SoundMarkers")
+	}
+
+	cfg.SoundMarkers = true
+	ok := &testutil.Answerer{Want: seq(answer)}
+	if err := Login(cfg, acct, ok); err != nil {
+		t.Fatal(err)
+	}
+	if out := ok.Out.String(); !strings.Contains(out, SoundMarker("success")) || strings.Contains(out, SoundMarker("error")) {
+		t.Fatalf("success login output: %q", out)
+	}
+
+	wrong := append([]int(nil), answer...)
+	wrong[0] = (wrong[0] + 1) % 9
+	bad := &testutil.Answerer{Want: seq(wrong)}
+	if err := Login(cfg, acct, bad); !errors.Is(err, ErrDenied) {
+		t.Fatalf("err = %v", err)
+	}
+	if out := bad.Out.String(); !strings.Contains(out, SoundMarker("error")) || strings.Contains(out, SoundMarker("success")) {
+		t.Fatalf("failed login output: %q", out)
 	}
 }

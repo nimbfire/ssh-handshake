@@ -23,6 +23,7 @@ cliente ──ssh──▶ sshd (chave/senha OK) ──ForceCommand──▶ ssh
 - [Criando handshakes (enrollment)](#criando-handshakes-enrollment)
 - [Referência de comandos](#referência-de-comandos)
 - [Modelo de segurança e riscos conhecidos](#modelo-de-segurança-e-riscos-conhecidos)
+- [Sons com o fuoda.sh](#sons-com-o-fuodash)
 - [Logs e fail2ban](#logs-e-fail2ban)
 - [Formato do arquivo de handshake](#formato-do-arquivo-de-handshake)
 - [Criando novos validadores](#criando-novos-validadores)
@@ -386,6 +387,7 @@ ssh-handshake version
 | `--allow-self-enroll` | login | desligado | permite criar no 1º login (só `home`) |
 | `--no-emoji` | login, enroll, verify | desligado | mostra só os nomes dos movimentos, sem emoji |
 | `--fail-delay D` | login | `3s` | espera antes de desconectar após falha |
+| `--sound-markers` | login | desligado | envia o marcador de som do [fuoda.sh](#sons-com-o-fuodash) (`success`/`error`) |
 | `-u USER` | enroll, install | usuário atual | usuário alvo |
 | `--print` | enroll | — | imprime o registro em stdout em vez de salvar |
 
@@ -436,6 +438,24 @@ Com um hash rápido (SHA-256), mesmo 12 passos cairiam em segundos numa GPU. Por
 - **Keylogger e shoulder surfing:** os dígitos digitados mudam a cada login porque as opções são embaralhadas. Como o número de cada movimento é fixo durante a sessão, um keylogger sozinho descobre quais respostas se repetem (dígitos iguais = mesmo movimento), mas não quais movimentos são. Com `--fixed-order`, os dígitos são sempre os mesmos, e um keylogger sozinho captura o handshake inteiro: aí ele protege só como uma senha numérica. Quem vê a tela durante um login vê os movimentos escolhidos, porque a sequência digitada fica na tela. É um segredo de conhecimento, como uma senha.
 - **Root:** root pode tudo. Se a conta root usar SSH, coloque-a no grupo também, ou desabilite `PermitRootLogin`.
 - **Console ou outro acesso:** o handshake só vale para SSH. Login local, painel do provedor etc. não passam por ele.
+
+## Sons com o fuoda.sh
+
+Com `--sound-markers` no `login`, o servidor envia, junto com a mensagem final, uma sequência invisível (`ESC ] 777 ; fuoda ; <evento> BEL`):
+
+| Situação | Evento |
+|----------|--------|
+| Handshake ok, ou criado no 1º login | `success` |
+| Handshake falhou, ou usuário sem handshake | `error` |
+
+Se o terminal do cliente estiver rodando dentro do `fuoda.sh shell`, o som do evento toca **na máquina do cliente**. Os outros terminais ignoram a sequência, então nada aparece na tela.
+
+```sh
+fuoda.sh shell                                   # no cliente
+docker compose exec client ssh alice@server      # o ambiente Docker já usa --sound-markers
+```
+
+O som só repete o resultado que a mensagem final já mostra na tela; não revela nada a mais.
 
 ## Logs e fail2ban
 

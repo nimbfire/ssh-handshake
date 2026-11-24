@@ -135,6 +135,7 @@ func runLogin(args []string) error {
 	c.register(fs)
 	selfEnroll := fs.Bool("allow-self-enroll", false, "permite criar o handshake no primeiro login (TOFU; só com --store home)")
 	failDelay := fs.Duration("fail-delay", 3*time.Second, "espera antes de desconectar após falha")
+	soundMarkers := fs.Bool("sound-markers", false, "envia o marcador invisível de som (success/error) do fuoda.sh shell")
 	_ = fs.Parse(args)
 
 	guard(c.timeout)
@@ -148,6 +149,7 @@ func runLogin(args []string) error {
 	}
 	cfg.AllowSelfEnroll = *selfEnroll
 	cfg.FailDelay = *failDelay
+	cfg.SoundMarkers = *soundMarkers
 
 	acct, err := currentAccount()
 	if err != nil {
