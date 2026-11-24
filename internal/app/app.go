@@ -31,6 +31,10 @@ type Config struct {
 	Length int
 	// MinLength passed to the validator on enrollment.
 	MinLength int
+	// SoundMarkers makes Login print an invisible OSC marker with the result
+	// ("success" or "error"). A terminal running inside "fuoda.sh shell"
+	// plays the matching sound; other terminals ignore the sequence.
+	SoundMarkers bool
 	// FailDelay is slept before reporting a failure, to slow online guessing.
 	FailDelay time.Duration
 	Log       audit.Logger
@@ -54,6 +58,15 @@ func (c *Config) defaults() {
 	}
 }
 
+// SoundMarker is the OSC sequence understood by "fuoda.sh shell".
+func SoundMarker(event string) string { return "\033]777;fuoda;" + event + "\a" }
+
+func (c Config) sound(t terminal.Terminal, event string) {
+	if c.SoundMarkers {
+		t.Printf("%s", SoundMarker(event))
+	}
+}
+
 // Login runs the handshake for acct. A nil error means access is granted.
 // Every failure path returns ErrDenied (wrapped) after FailDelay.
 func Login(c Config, acct store.Account, t terminal.Terminal) error {
@@ -61,6 +74,7 @@ func Login(c Config, acct store.Account, t terminal.Terminal) error {
 	deny := func(reason string, err error) error {
 		c.Log.Warn(fmt.Sprintf("denied user=%s %s reason=%q", acct.Name, audit.Remote(), reason))
 		c.Sleep(c.FailDelay)
+		c.sound(t, "error")
 		t.Printf("\nHandshake falhou. Desconectando.\n")
 		if err != nil {
 			return fmt.Errorf("%w: %s: %v", ErrDenied, reason, err)
@@ -74,6 +88,7 @@ func Login(c Config, acct store.Account, t terminal.Terminal) error {
 			c.Log.Warn(fmt.Sprintf("denied user=%s %s reason=\"no handshake configured\"", acct.Name, audit.Remote()))
 			t.Printf("\nNenhum handshake configurado para %s. Contate o administrador.\n", acct.Name)
 			c.Sleep(c.FailDelay)
+			c.sound(t, "error")
 			return fmt.Errorf("%w: no handshake configured", ErrDenied)
 		}
 		t.Printf("\nNenhum handshake configurado para %s. Vamos criar um agora.\n", acct.Name)
@@ -81,6 +96,7 @@ func Login(c Config, acct store.Account, t terminal.Terminal) error {
 			return deny("enrollment failed", err)
 		}
 		c.Log.Info(fmt.Sprintf("enrolled user=%s %s validator=%s (first login)", acct.Name, audit.Remote(), c.Validator))
+		c.sound(t, "success")
 		t.Printf("\nHandshake criado. Acesso liberado.\n\n")
 		return nil
 	}
@@ -98,6 +114,7 @@ func Login(c Config, acct store.Account, t terminal.Terminal) error {
 		return deny("wrong answer", nil)
 	}
 	c.Log.Info(fmt.Sprintf("accepted user=%s %s validator=%s", acct.Name, audit.Remote(), rec.Validator))
+	c.sound(t, "success")
 	t.Printf("\nHandshake ok.\n\n")
 	return nil
 }
